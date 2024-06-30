@@ -73,31 +73,27 @@ async def init_her_cycle(msg: Email, completion: Completion):
         raise
 
 
-async def human_empowered_review_resolution(msg: Email, reply: str):
-    app.logger.info("Final stage - sending out HER-Resolved reply 🎉")
-    await send_reply(msg, reply)
+# async def human_empowered_review_resolution(msg: Email, reply: str):
+#     app.logger.info("Final stage - sending out HER-Resolved reply 🎉")
+#     await send_reply(msg, reply)
 
 
 @app.before_serving
 async def startup():
     await store.initialize_db()
     user_email_monitor = EmailMonitor(task_factory=filter_via_llm, store=store)
-    her_email_monitor = HEREmailMonitor(task_factory=human_empowered_review_resolution, store=store, review_summarizer=ReviewSentiment(openai.AsyncOpenAI()))
+    her_email_monitor = HEREmailMonitor(store=store, review_summarizer=ReviewSentiment(openai.AsyncOpenAI()))
     her_search_criteria =  list_to_imap_search_criteria(env.get_as_csv_list("HER_EMAIL_LIST"))
 
     app.email_monitors_task = asyncio.gather(
         asyncio.create_task(user_email_monitor.start(f'FROM "arsen@hosteasy.ai"'), name="EmailMonitor"),
         asyncio.create_task(her_email_monitor.start(f'{her_search_criteria}'), name="HERMonitor")
     )
-    # app.user_email_monitor_task = asyncio.ensure_future(user_email_monitor.start(f'FROM "arsen@hosteasy.ai"'))
-    # app.her_email_monitor_task = asyncio.ensure_future(her_email_monitor.start(f'{her_search_criteria}'))
     
 
 @app.after_serving
 async def shutdown():
     app.email_monitors_task.cancel()  # Or use a variable in the while loop
-    # app.user_email_monitor_task.cancel()
-    # app.her_email_monitor_task.cancel()
 
 
 @app.route('/api', methods=['POST', 'GET', 'PUT'])

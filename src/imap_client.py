@@ -12,6 +12,7 @@ from email.utils import parsedate_to_datetime
 from .models import Email, HERStatus, HERLog
 from .store import BaseStore
 from .llms import PhonyLLMCall, LLMCall
+from .smtp_client import send_reply
 
 
 # Configuration
@@ -114,7 +115,7 @@ class EmailMonitor:
         recepients=[rec.strip() for rec in msg['To'].split(",")]
         cc=[rec.strip() for rec in msg['Cc'].split(",")] if 'Cc' in msg else None
         bcc=[rec.strip() for rec in msg['Bcc'].split(",")] if 'Bcc' in msg else None
-        return Email(id=msg['Message-ID'], sender=msg['From'], recipients=recepients, subject=msg['Subject'], body=current_email, sent_at=datetime, reply_to=msg['In-Reply-To'], cc=cc, bcc=bcc, references=msg.get('References'))
+        return Email(id=msg['Message-ID'], sender=msg['From'], recipients=recepients, subject=msg['Subject'], body=current_email, sent_at=datetime, reply_to=msg['In-Reply-To'], cc=cc, bcc=bcc, references=msg.get('References'), _msg=msg)
 
     async def fetch_subjects_emails(self, email_id_str):
         # Ensure email_id is a string
@@ -201,9 +202,18 @@ class EmailMonitor:
             await self.imap_client.logout()
 
 
+def starts_with_uuid4(s):
+    pattern = re.compile(r'^\[([0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\]')
+
+    match = pattern.match(s)
+    if match:
+        return True, match.group(1)
+    return False, None
+
+
 class HEREmailMonitor(EmailMonitor):
     
-    def __init__(self, host:str=None, port:int=None, task_factory=None, user:str = None, password:str = None, store:BaseStore = None, summarizer:LLMCall = None): 
+    def __init__(self, host:str=None, port:int=None, user:str = None, password:str = None, store:BaseStore = None, summarizer:LLMCall = None): 
         host = host if host else env.get("HER_IMAP_HOST")
         port = port if port else env.get_int("HER_IMAP_PORT")
         self.imap_client = aioimaplib.IMAP4_SSL(host=host, port=port)
@@ -211,7 +221,6 @@ class HEREmailMonitor(EmailMonitor):
         self.user = user if user else env.get("HER_IMAP_USER")
         self.pwd =  password if password else env.get("HER_IMAP_PASSWORD") 
         self.summarizer = summarizer if summarizer else PhonyLLMCall({"sentiment":"affirmative"})
-        self.task_factory = task_factory
         self.store = store
 
 
@@ -278,15 +287,21 @@ class HEREmailMonitor(EmailMonitor):
         last_idx = self.empty_line_idx(lines)
         return "\r\n".join(lines[1:last_idx+1])
 
-
     async def human_amended_review(self, an_email: Email):
         logger.info(f"HEREmailMonitor.human_amended_review: 📧 : {an_email.id} : {an_email.sender} : {an_email.reply_to} : {an_email.subject}")
         original = await self.lookup_sent(an_email.references)
-        if not original:
-            logger.warning(f"Couldn't locate original email sent to {an_email.recipients=} withh {an_email.id=} : {an_email.sender=} : {an_email.reply_to=} : {an_email.subject=} ")
-            return None
+        her_log_id = None
+        if original:
+            her_log_id = original['X-Human-Empowered-Review-ID']
+        else:
+            ok, uuid4_str = starts_with_uuid4(an_email.subject)
+            if ok:
+                her_log_id = uuid4_str
+            else:
+                logger.warning(f"Couldn't locate original email sent to {an_email.recipients=} withh {an_email.id=} : {an_email.sender=} : {an_email.reply_to=} : {an_email.subject=} ")
+                return None
 
-        her_log = await self.store.get_her_log(original['X-Human-Empowered-Review-ID'])
+        her_log = await self.store.get_her_log(her_log_id)
         if not her_log:
             logger.warning(f"Couldn't locate HER log record for {original['X-Human-Empowered-Review-ID']=}  as part of {original['Message-ID']=} from {original['From']=}")
             return None
@@ -327,11 +342,10 @@ class HEREmailMonitor(EmailMonitor):
                 continue
             email = await self.store.get_email(completion.entity_id)
             if her.status == HERStatus.APPROVED:
-                send_out_tasks.append(asyncio.create_task(self.task_factory(email, her.proposed)))
+                send_out_tasks.append(asyncio.create_task(send_reply(email, her.proposed)))
             elif her.status == HERStatus.AMENDED:
-                send_out_tasks.append(asyncio.create_task(self.task_factory(email, her.amended)))
+                send_out_tasks.append(asyncio.create_task(send_reply(email, her.amended)))
         await asyncio.gather(*send_out_tasks)
-        # messaging_tasks = [asyncio.create_task(self.task_factory(her))]
 
 
     async def start(self, search_criteria=None):

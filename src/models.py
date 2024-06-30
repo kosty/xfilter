@@ -3,6 +3,7 @@ from pydantic import BaseModel, EmailStr, Field
 from typing import List, Optional
 from enum import Enum
 from uuid import uuid4
+from email.message import Message
 
 
 class Email(BaseModel):
@@ -16,6 +17,7 @@ class Email(BaseModel):
     references: Optional[str] = None
     cc: Optional[List[EmailStr]] = None
     bcc: Optional[List[EmailStr]] = None
+    _msg: Optional[Message] = None #  TODO: for backporting old code only, remove at earliest convenience
 
 
 class Completion(BaseModel):
