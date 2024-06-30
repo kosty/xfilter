@@ -9,14 +9,13 @@ from typing import List, Optional
 from datetime import datetime
 from email.message import Message
 from email.utils import parsedate_to_datetime
-from models import Email, HERStatus, HERLog
-from store import BaseStore
-from llms import PhonyLLMCall, LLMCall
+from .models import Email, HERStatus, HERLog
+from .store import BaseStore
+from .llms import PhonyLLMCall, LLMCall
 
 
 # Configuration
-SENDER_EMAIL = 'arsen@hosteasy.ai'
-# SENDER_EMAIL = 'lankakos@gmail.com'
+SENDER_EMAIL = env.get("SENDER_EMAIL") 
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +27,7 @@ def get_text_part(msg: Message) -> str:
                 plain_text = part.get_payload(decode=True).decode('utf-8')
                 logger.debug(f"Got plain text {plain_text}")
                 return plain_text
+        return None
     else:
         plain_single_part_text = msg.get_payload(decode=True).decode('utf-8')
         logger.debug(f"Got plain single part text {plain_single_part_text}")
@@ -102,19 +102,19 @@ class EmailMonitor:
         logger.error(f"Got non-ok reply from server {result} : {data=}")
         return None
 
-
     def data_to_email(self, data) -> Email: # -> email.message.Message:
         msg = email.message_from_bytes(data[1])
-        logger.debug(f"Processing {msg['Subject']=}: {msg['Message-ID']} :  {msg.keys()}")
+        logger.info(f"Processing {msg['Subject']=}: {msg['Message-ID']} :  {msg.keys()}")
         txt = get_text_part(msg) # .split('\r\n')
-        current_email = extract_current_email_content(txt)
+        current_email = ""
+        if txt:
+            current_email = extract_current_email_content(txt)
         # f"{msg['To']=}\n{msg['From']=}\n{msg['Subject']=}\n{msg['Date']=}\n{msg['Message-ID']=}\n{msg['Sender']=}\n{msg['Reply-To']=}"
         datetime = parsedate_to_datetime(msg['Date'])
         recepients=[rec.strip() for rec in msg['To'].split(",")]
         cc=[rec.strip() for rec in msg['Cc'].split(",")] if 'Cc' in msg else None
         bcc=[rec.strip() for rec in msg['Bcc'].split(",")] if 'Bcc' in msg else None
         return Email(id=msg['Message-ID'], sender=msg['From'], recipients=recepients, subject=msg['Subject'], body=current_email, sent_at=datetime, reply_to=msg['In-Reply-To'], cc=cc, bcc=bcc, references=msg.get('References'))
-
 
     async def fetch_subjects_emails(self, email_id_str):
         # Ensure email_id is a string
@@ -222,19 +222,6 @@ class HEREmailMonitor(EmailMonitor):
             return True
         except asyncio.TimeoutError:
             return True
-
-
-    def data_to_email(self, data) -> Email: # -> email.message.Message:
-        msg = email.message_from_bytes(data[1])
-        logger.info(f"Processing {msg['Subject']=}: {msg['Message-ID']} :  {msg.keys()}")
-        txt = get_text_part(msg) # .split('\r\n')
-        current_email = extract_current_email_content(txt)
-        # f"{msg['To']=}\n{msg['From']=}\n{msg['Subject']=}\n{msg['Date']=}\n{msg['Message-ID']=}\n{msg['Sender']=}\n{msg['Reply-To']=}"
-        datetime = parsedate_to_datetime(msg['Date'])
-        recepients=[rec.strip() for rec in msg['To'].split(",")]
-        cc=[rec.strip() for rec in msg['Cc'].split(",")] if 'Cc' in msg else None
-        bcc=[rec.strip() for rec in msg['Bcc'].split(",")] if 'Bcc' in msg else None
-        return Email(id=msg['Message-ID'], sender=msg['From'], recipients=recepients, subject=msg['Subject'], body=current_email, sent_at=datetime, reply_to=msg['In-Reply-To'], cc=cc, bcc=bcc, references=msg.get('References'))
 
 
     async def lookup_sent(self, message_id: str) -> Optional[email.message.Message]:
@@ -402,8 +389,10 @@ class HEREmailMonitor(EmailMonitor):
                         email_id = binary_email_id.decode()
                         an_email = await self.fetch_rfc822_email(email_id)
                         if not an_email:
-                            logger.warning(f"Failed to fetch {email_id=}")
+                            logger.warning(f"Failed to fetch {email_id=}. Skipping.")
                             continue
+                        if not an_email.body:
+                            logger.warning(f"Email {an_email.id} body appears empty {email_id=}. Skipping.")
                         emailz.append(an_email)
 
                     logger.info("HEREmailMonitor.fetch_rfc822_email [after]📝 ") # on duty 📧s🔍🕵️🔎👀📝📝📄📄📜📃📑

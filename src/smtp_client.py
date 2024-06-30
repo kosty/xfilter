@@ -6,10 +6,10 @@ from email.mime.text import MIMEText
 from email.message import Message
 from email.header import Header
 from email.utils import formataddr
-from models import Email, HERLog
+from .models import Email, HERLog
 import logging
 import backoff
-from store import BaseStore
+from .store import BaseStore
 from typing import Optional, Any
 
 logger = logging.getLogger(__name__)

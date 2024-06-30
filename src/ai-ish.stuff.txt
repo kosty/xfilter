@@ -1,0 +1,62 @@
+
+IN_OPEN_TAG = "<INPUT>"
+IN_CLOS_TAG = "</INPUT>"
+OUT_OPEN_TAG = "<OUTPUT>"
+OUT_CLOS_TAG = "</OUTPUT>"
+
+contexts = {
+    "freeform": f"""
+
+"""
+}
+
+def get_text_from_openai(context, client):
+    messages = [
+        {"role": "system", "content": context[0]},
+        {"role": "user", "content": context[1]}
+    ]
+    completion = client.chat.completions.create(
+        model="gpt-4o",
+        messages=messages
+    )
+
+    text = completion.choices[0].message.content.strip()
+    
+    return text
+
+
+def format_prompt(docs, question):
+    if isinstance(question, DateQuestion):
+        facts = "\n".join(docs)
+        user = f"""
+What would be the best answer to question
+    {question.text}
+    
+Be terse. Provide only the answer, do not specify any explanation or reasonoing. Use the following date format 'YYYY-MM'
+"""
+        system = f"""
+Geven the list of following statements:
+{facts}
+
+{user}
+"""
+        return system, user
+    elif isinstance(question, MultipleChoiceQuestion):
+        facts = "\n".join(docs)
+        choices = ' '.join([ f"`{txt}`" for i, txt in enumerate(question.choices)])
+        user = f"""
+Which of the following options best matches the answer to the question `{question.text}`
+
+Options: {choices}  
+
+Be terse with your answer. Provide only one of the options as answer, do not specify any explanation or reasonoing.
+"""
+        system = f"""Geven the list of following statements:
+{facts}
+{user}
+"""
+        return system, user
+
+    text = "\n".join(docs)
+    system = f"Geven the list of following statements:{text}\n\nWhat would be the best answer to question\n    {question.text}"
+    return system, question.text

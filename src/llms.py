@@ -5,7 +5,7 @@ import backoff
 import logging
 import openai
 import aiofiles
-from models import Completion
+from .models import Completion
 from typing import Any
 import json
 
@@ -19,7 +19,7 @@ class LLMCall:
         pass
 
 
-class GenericLLMCall:    
+class GenericLLMCall(LLMCall):
     def __init__(self, client, root:str = None, model:str = "gpt-4o", temperature=0.042):
         if root:
             self.root = Path(root)

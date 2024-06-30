@@ -1,7 +1,7 @@
 import aiosqlite
 import environment as env
 from pathlib import Path
-from models import Email, Completion, HERLog, HERStatus
+from .models import Email, Completion, HERLog, HERStatus
 import json
 from typing import List
 import logging
