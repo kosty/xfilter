@@ -22,17 +22,28 @@ logger = logging.getLogger(__name__)
 
 
 def get_text_part(msg: Message) -> str:
+    def decode_payload(part):
+        charset = part.get_content_charset() or 'utf-8'
+        try:
+            return part.get_payload(decode=True).decode(charset)
+        except (UnicodeDecodeError, LookupError) as e:
+            logger.error(f"Failed to decode payload with charset {charset}: {e}")
+            return None
+
     if msg.is_multipart():
         for part in msg.walk():
             if part.get_content_type() == 'text/plain':
-                plain_text = part.get_payload(decode=True).decode('utf-8')
-                logger.debug(f"Got plain text {plain_text}")
-                return plain_text
+                plain_text = decode_payload(part)
+                if plain_text is not None:
+                    logger.debug(f"Got plain text {plain_text}")
+                    return plain_text
         return None
     else:
-        plain_single_part_text = msg.get_payload(decode=True).decode('utf-8')
-        logger.debug(f"Got plain single part text {plain_single_part_text}")
-        return plain_single_part_text
+        plain_single_part_text = decode_payload(msg)
+        if plain_single_part_text is not None:
+            logger.debug(f"Got plain single part text {plain_single_part_text}")
+            return plain_single_part_text
+        return None
 
 
 def extract_current_email_content(email_content:str) -> str:
