@@ -153,10 +153,10 @@ class EmailMonitor:
                     self.imap_client.idle_done()
 
                     # Search for emails from a specific sender
-                    logger.info("EmailMonitor.imap_client.serach 🔍 ") # on duty 📧s🔍🕵️🔎👀📝📝📄📄📜📃📑
+                    logger.debug("EmailMonitor.imap_client.serach 🔍 ") # on duty 📧s🔍🕵️🔎👀📝📝📄📄📜📃📑
                     result, data = await self.imap_client.search(search_criteria)
                     if result != 'OK' or not data[0]:
-                        logger.error(f"EmailMonitor.imap_client.search {result=} : {data=}")
+                        logger.debug(f"EmailMonitor.imap_client.search {result=} : {data=}")
                         continue
                     
                     emailz = []
@@ -392,7 +392,7 @@ class HEREmailMonitor(EmailMonitor):
                         continue
                     
                     if not data[0]:
-                        logger.info(f"HEREmailMonitor.imap_client.serach [empty resutl] {search_criteria} : {result=} {data=}")
+                        logger.debug(f"HEREmailMonitor.imap_client.serach [empty resutl] {search_criteria} : {result=} {data=}")
                         continue
                 
                     emailz = []
