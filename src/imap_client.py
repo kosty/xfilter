@@ -116,7 +116,7 @@ class EmailMonitor:
 
     def data_to_email(self, data) -> Email: # -> email.message.Message:
         msg = email.message_from_bytes(data[1])
-        logger.info(f"Processing {msg['Subject']=}: {msg['Message-ID']} :  {msg.keys()}")
+        logger.debug(f"Processing {msg['Subject']=}: {msg['Message-ID']} :  {msg.keys()}")
         txt = get_text_part(msg) # .split('\r\n')
         current_email = ""
         if txt:
