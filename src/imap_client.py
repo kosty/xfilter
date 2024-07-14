@@ -9,6 +9,7 @@ from typing import List, Optional
 from datetime import datetime
 from email.message import Message
 from email.utils import parsedate_to_datetime
+from email.header import decode_header
 from .models import Email, HERStatus, HERLog
 from .store import BaseStore
 from .llms import PhonyLLMCall, LLMCall
@@ -116,6 +117,9 @@ class EmailMonitor:
 
     def data_to_email(self, data) -> Email: # -> email.message.Message:
         msg = email.message_from_bytes(data[1])
+        return self.msg_to_email(msg)
+
+    def msg_to_email(self, msg) -> Email:
         logger.debug(f"Processing {msg['Subject']=}: {msg['Message-ID']} :  {msg.keys()}")
         txt = get_text_part(msg) # .split('\r\n')
         current_email = ""
@@ -126,7 +130,27 @@ class EmailMonitor:
         recepients=[rec.strip() for rec in msg['To'].split(",")]
         cc=[rec.strip() for rec in msg['Cc'].split(",")] if 'Cc' in msg else None
         bcc=[rec.strip() for rec in msg['Bcc'].split(",")] if 'Bcc' in msg else None
-        return Email(id=msg['Message-ID'], sender=msg['From'], recipients=recepients, subject=msg['Subject'], body=current_email, sent_at=datetime, reply_to=msg['In-Reply-To'], cc=cc, bcc=bcc, references=msg.get('References'), _msg=msg)
+        subj = msg['Subject']
+        if subj.startswith('=?'):
+            subj = self.decode_rfc2047_subject(subj)
+        email = Email(id=msg['Message-ID'], sender=msg['From'], recipients=recepients, subject=subj, body=current_email, sent_at=datetime, reply_to=msg['In-Reply-To'], cc=cc, bcc=bcc, references=msg.get('References'))
+        email._msg=msg
+        return email
+
+
+    def decode_rfc2047_subject(self, subject):
+        decoded_fragments = decode_header(subject)
+        decoded_subject = ''
+        for fragment, encoding in decoded_fragments:
+            if isinstance(fragment, bytes):
+                if encoding is not None:
+                    decoded_subject += fragment.decode(encoding)
+                else:
+                    decoded_subject += fragment.decode('utf-8')
+            else:
+                decoded_subject += fragment
+        return decoded_subject
+
 
     async def fetch_subjects_emails(self, email_id_str):
         # Ensure email_id is a string
@@ -164,7 +188,7 @@ class EmailMonitor:
                     self.imap_client.idle_done()
 
                     # Search for emails from a specific sender
-                    logger.debug("EmailMonitor.imap_client.serach 🔍 ") # on duty 📧s🔍🕵️🔎👀📝📝📄📄📜📃📑
+                    logger.debug(f"EmailMonitor.imap_client.serach 🔍 {search_criteria} ") # on duty 📧s🔍🕵️🔎👀📝📝📄📄📜📃📑
                     result, data = await self.imap_client.search(search_criteria)
                     if result != 'OK' or not data[0]:
                         logger.debug(f"EmailMonitor.imap_client.search {result=} : {data=}")
