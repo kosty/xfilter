@@ -444,10 +444,10 @@ class HEREmailMonitor(EmailMonitor):
                     self.imap_client.idle_done()
 
                     # Search for emails from a specific sender
-                    logger.info("HEREmailMonitor.imap_client.serach 🕵️📧 ") # on duty 📧s🔍🕵️🔎👀📝📝📄📄📜📃📑
+                    logger.debug("HEREmailMonitor.imap_client.serach 🕵️📧 ") # on duty 📧s🔍🕵️🔎👀📝📝📄📄📜📃📑
                     result, data = await self.imap_client.search(search_criteria)
                     if result != 'OK':
-                        logger.info(f"HEREmailMonitor.imap_client.serach [failed] {search_criteria} : {result=} {data=}")
+                        logger.warning(f"HEREmailMonitor.imap_client.serach [failed] {search_criteria} : {result=} {data=}")
                         continue
                     
                     if not data[0]:
@@ -456,7 +456,7 @@ class HEREmailMonitor(EmailMonitor):
                 
                     emailz = []
                     email_ids = data[0].split()
-                    logger.info("HEREmailMonitor.fetch_rfc822_email [before]📧📝 ") # on duty 📧s🔍🕵️🔎👀📝📝📄📄📜📃📑
+                    logger.debug("HEREmailMonitor.fetch_rfc822_email [before]📧📝 ") # on duty 📧s🔍🕵️🔎👀📝📝📄📄📜📃📑
                     # Apparently this part HAS to be sequential... is it protocol ?
                     for binary_email_id in email_ids:
                         email_id = binary_email_id.decode()
