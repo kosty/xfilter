@@ -10,6 +10,7 @@ from datetime import datetime
 from email.message import Message
 from email.utils import parsedate_to_datetime
 from email.header import decode_header
+from uuid import uuid4
 from .models import Email, HERStatus, HERLog
 from .store import BaseStore
 from .llms import PhonyLLMCall, LLMCall
@@ -93,16 +94,30 @@ sh.setLevel(logging.DEBUG)
 sh.setFormatter(logging.Formatter("%(asctime)s %(levelname)s [%(module)s:%(lineno)d] %(message)s"))
 aioimaplib_logger.addHandler(sh)
 
+from pathlib import Path
 
 class EmailMonitor:
-    def __init__(self, host:str=None, port:int=None, task_factory=None, user:str = None, password:str = None, store:BaseStore = None): 
+    def __init__(self, host:str=None, port:int=None, task_factory=None, user:str = None, password:str = None, store:BaseStore = None, email_debug_root:str = None): 
         host = host if host else env.get("IMAP_HOST")
         port = port if port else env.get_int("IMAP_PORT")
         self.imap_client = aioimaplib.IMAP4_SSL(host=host, port=port)
         self.user = user if user else env.get("IMAP_USER")
-        self.pwd =  password if password else env.get("IMAP_PASSWORD") 
+        self.pwd =  password if password else env.get("IMAP_PASSWORD")
+        root = email_debug_root if email_debug_root else env.get('XFILTER_EMAILS_DEBUG_ROOT')
+        if root:
+            self.email_debug_root = Path(root) / "EmailMonitor"
+            self.email_debug = True
+        else:
+            self.email_debug = False
         self.task_factory = task_factory
         self.store = store
+
+
+    async def write_bytes_to_file(self, path: Path, data: bytes) -> None:
+        if not path.parent.exists():
+            path.parent.mkdir(parents=True, exist_ok=True)
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, path.write_bytes, data)
 
 
     async def fetch_rfc822_email(self, email_id:str) -> Optional[Email]: # Optional[email.message.Message]:
@@ -111,7 +126,16 @@ class EmailMonitor:
         # Fetch the email's subject
         result, data = await self.imap_client.fetch(email_id, 'RFC822')
         if result == 'OK':
-            return self.data_to_email(data)
+            try:
+                an_email = self.data_to_email(data)
+                if self.email_debug:
+                    await self.write_bytes_to_file(self.email_debug_root / "ok" / an_email.id, data[1])
+                return an_email
+            except Exception as e:
+                debug_inputs = self.email_debug_root / "error" / email_id + uuid4()
+                await self.write_bytes_to_file(debug_inputs, data[1])
+                logger.exception(f"Exception while parsing email {e}, test inputs stored to {debug_inputs}")
+                raise
         logger.error(f"Got non-ok reply from server {result} : {data=}")
         return None
 
