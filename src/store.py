@@ -101,10 +101,8 @@ class BaseStore:
 class SQLiteStore(BaseStore):
     
     def __init__(self, db_path: str = None):
-        if not db_path:
-            self.db_path = Path(env.get("DB_FILE_PATH"))
-        else:
-            self.db_path = Path(db_path)
+        str_path = db_path if db_path else env.get("DB_FILE_PATH")
+        self.db_path = Path(str_path)
         self.lock = asyncio.Lock()
         self.initialized = False
 

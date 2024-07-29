@@ -152,7 +152,7 @@ async def send_her_emails(msg: Email, her_log: HERLog) -> Optional[Any]:
     # Create MIMEText object for the email body
 
     message = MIMEText(body, 'plain', 'utf-8')
-    sender = formataddr(("xFilter review", from_email))
+    sender = formataddr((env.get("REVIEW_EMAIL_TITLE"), from_email))
     message['From'] = sender
     message['To'] = ','.join(her_log.outbound)
     message['Subject'] = Header(f"[{her_log.id}] Please review the following communication", 'utf-8')
